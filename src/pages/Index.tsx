@@ -7,6 +7,11 @@ import Icon from "@/components/ui/icon";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const Index = () => {
   const [clicks, setClicks] = useState<number>(() => {
@@ -44,6 +49,21 @@ const Index = () => {
     return saved ? parseInt(saved) : 0;
   });
   
+  const [withdrawalAmount, setWithdrawalAmount] = useState<string>("");
+  const [selectedBank, setSelectedBank] = useState<string>("sber");
+  const [cardNumber, setCardNumber] = useState<string>("");
+  const [isWithdrawalDialogOpen, setIsWithdrawalDialogOpen] = useState<boolean>(false);
+  const [withdrawalHistory, setWithdrawalHistory] = useState<Array<{
+    id: string;
+    amount: number;
+    date: string;
+    bank: string;
+    status: 'pending' | 'completed' | 'rejected';
+  }>>(() => {
+    const saved = localStorage.getItem("withdrawalHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   // Сохранение данных при их изменении
   useEffect(() => {
     localStorage.setItem("clicks", clicks.toString());
@@ -53,7 +73,8 @@ const Index = () => {
     localStorage.setItem("clicksToNextLevel", clicksToNextLevel.toString());
     localStorage.setItem("boostActive", boostActive.toString());
     localStorage.setItem("boostEndTime", boostEndTime.toString());
-  }, [clicks, money, level, clickValue, clicksToNextLevel, boostActive, boostEndTime]);
+    localStorage.setItem("withdrawalHistory", JSON.stringify(withdrawalHistory));
+  }, [clicks, money, level, clickValue, clicksToNextLevel, boostActive, boostEndTime, withdrawalHistory]);
   
   // Проверка активного бустера
   useEffect(() => {
@@ -154,6 +175,105 @@ const Index = () => {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
+  // Форматирование номера карты
+  const formatCardNumber = (value: string) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = matches && matches[0] || '';
+    const parts = [];
+
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+
+    if (parts.length) {
+      return parts.join(' ');
+    } else {
+      return value;
+    }
+  };
+
+  // Обработка изменения номера карты
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatCardNumber(e.target.value);
+    setCardNumber(formattedValue);
+  };
+
+  // Обработка запроса на вывод средств
+  const handleWithdrawalRequest = () => {
+    const amountNum = parseFloat(withdrawalAmount);
+    
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast({
+        title: "Ошибка",
+        description: "Укажите корректную сумму для вывода",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (amountNum > money) {
+      toast({
+        title: "Недостаточно средств",
+        description: "На вашем балансе недостаточно средств для вывода",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (cardNumber.length < 16 || cardNumber.replace(/\s+/g, '').length !== 16) {
+      toast({
+        title: "Ошибка",
+        description: "Введите корректный номер карты (16 цифр)",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Списываем сумму с баланса
+    setMoney(prev => parseFloat((prev - amountNum).toFixed(2)));
+    
+    // Добавляем запись в историю выводов
+    const newWithdrawal = {
+      id: `withdraw-${Date.now()}`,
+      amount: amountNum,
+      date: new Date().toISOString(),
+      bank: selectedBank,
+      status: 'pending' as const
+    };
+    
+    setWithdrawalHistory(prev => [newWithdrawal, ...prev]);
+    
+    // Закрываем диалог
+    setIsWithdrawalDialogOpen(false);
+    
+    // Сбрасываем форму
+    setWithdrawalAmount("");
+    setCardNumber("");
+    
+    // Показываем уведомление
+    toast({
+      title: "Заявка на вывод средств создана",
+      description: `Сумма ${amountNum} ₽ будет переведена на вашу карту в течение 24 часов.`
+    });
+    
+    // Имитация обработки запроса (в реальном приложении здесь был бы запрос к API)
+    setTimeout(() => {
+      setWithdrawalHistory(prev => 
+        prev.map(item => 
+          item.id === newWithdrawal.id 
+            ? {...item, status: 'completed'} 
+            : item
+        )
+      );
+      
+      toast({
+        title: "Вывод средств выполнен",
+        description: `Сумма ${amountNum} ₽ переведена на вашу карту ${selectedBank === 'sber' ? 'Сбербанк' : 'Тинькофф'}.`
+      });
+    }, 10000); // Имитация задержки в 10 секунд
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-purple-50 p-4">
       <div className="max-w-md w-full space-y-8">
@@ -202,14 +322,94 @@ const Index = () => {
             </div>
           </CardContent>
           
-          <CardFooter className="flex flex-col space-y-2">
-            <p className="text-sm text-center text-gray-500 mb-4">
-              Повышайте свой уровень, чтобы увеличить стоимость клика!
-            </p>
+          <CardFooter className="flex justify-between gap-2">
+            <Dialog open={isWithdrawalDialogOpen} onOpenChange={setIsWithdrawalDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex-1 border-blue-500 text-blue-600 hover:bg-blue-50">
+                  <Icon name="CreditCard" className="mr-2 h-5 w-5" />
+                  Вывести деньги
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Вывод средств</DialogTitle>
+                  <DialogDescription>
+                    Выберите банк и введите сумму для вывода. Минимальная сумма вывода: 100 ₽
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="amount" className="text-right">
+                      Сумма
+                    </Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      min="100"
+                      max={money}
+                      placeholder="Сумма для вывода"
+                      value={withdrawalAmount}
+                      onChange={(e) => setWithdrawalAmount(e.target.value)}
+                      className="col-span-3"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">
+                      Банк
+                    </Label>
+                    <RadioGroup 
+                      className="col-span-3"
+                      value={selectedBank}
+                      onValueChange={setSelectedBank}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="sber" id="sber" />
+                        <Label htmlFor="sber" className="flex items-center">
+                          <Icon name="Wallet" className="mr-2 h-4 w-4 text-green-600" />
+                          Сбербанк
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="tinkoff" id="tinkoff" />
+                        <Label htmlFor="tinkoff" className="flex items-center">
+                          <Icon name="CreditCard" className="mr-2 h-4 w-4 text-yellow-500" />
+                          Тинькофф
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="card" className="text-right">
+                      Номер карты
+                    </Label>
+                    <Input
+                      id="card"
+                      placeholder="0000 0000 0000 0000"
+                      value={cardNumber}
+                      onChange={handleCardNumberChange}
+                      maxLength={19}
+                      className="col-span-3"
+                    />
+                  </div>
+                </div>
+                
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsWithdrawalDialogOpen(false)}>
+                    Отмена
+                  </Button>
+                  <Button onClick={handleWithdrawalRequest}>
+                    Вывести средства
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="outline" className="w-full border-green-500 text-green-600 hover:bg-green-50">
+                <Button variant="outline" className="flex-1 border-green-500 text-green-600 hover:bg-green-50">
                   <Icon name="HeartHandshake" className="mr-2 h-5 w-5" />
                   Поддержать проект
                 </Button>
@@ -295,6 +495,38 @@ const Index = () => {
             </Sheet>
           </CardFooter>
         </Card>
+        
+        {/* История выводов */}
+        {withdrawalHistory.length > 0 && (
+          <Card className="shadow-lg border-2 border-purple-100">
+            <CardHeader>
+              <CardTitle className="text-xl">История выводов</CardTitle>
+              <CardDescription>Ваши запросы на вывод средств</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {withdrawalHistory.map((withdrawal) => (
+                  <div key={withdrawal.id} className="flex justify-between items-center p-3 border rounded-md">
+                    <div>
+                      <div className="font-medium">{withdrawal.amount.toFixed(2)} ₽</div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(withdrawal.date).toLocaleDateString()} - {withdrawal.bank === 'sber' ? 'Сбербанк' : 'Тинькофф'}
+                      </div>
+                    </div>
+                    <Badge 
+                      variant={withdrawal.status === 'completed' ? 'default' : 
+                             withdrawal.status === 'rejected' ? 'destructive' : 'outline'}
+                      className={withdrawal.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
+                    >
+                      {withdrawal.status === 'completed' ? 'Выполнен' : 
+                       withdrawal.status === 'rejected' ? 'Отклонен' : 'В обработке'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>Чем больше кликаете, тем больше зарабатываете!</p>
