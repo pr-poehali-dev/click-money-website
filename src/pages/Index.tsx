@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import Icon from "@/components/ui/icon";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [clicks, setClicks] = useState<number>(() => {
@@ -30,6 +33,16 @@ const Index = () => {
     const saved = localStorage.getItem("clicksToNextLevel");
     return saved ? parseInt(saved) : 100;
   });
+
+  const [boostActive, setBoostActive] = useState<boolean>(() => {
+    const saved = localStorage.getItem("boostActive");
+    return saved ? saved === "true" : false;
+  });
+  
+  const [boostEndTime, setBoostEndTime] = useState<number>(() => {
+    const saved = localStorage.getItem("boostEndTime");
+    return saved ? parseInt(saved) : 0;
+  });
   
   // Сохранение данных при их изменении
   useEffect(() => {
@@ -38,8 +51,29 @@ const Index = () => {
     localStorage.setItem("level", level.toString());
     localStorage.setItem("clickValue", clickValue.toString());
     localStorage.setItem("clicksToNextLevel", clicksToNextLevel.toString());
-  }, [clicks, money, level, clickValue, clicksToNextLevel]);
+    localStorage.setItem("boostActive", boostActive.toString());
+    localStorage.setItem("boostEndTime", boostEndTime.toString());
+  }, [clicks, money, level, clickValue, clicksToNextLevel, boostActive, boostEndTime]);
   
+  // Проверка активного бустера
+  useEffect(() => {
+    const checkBoost = () => {
+      const now = Date.now();
+      if (boostActive && now > boostEndTime) {
+        setBoostActive(false);
+        setClickValue(prev => parseFloat((prev / 2).toFixed(2)));
+        toast({
+          title: "Усиление закончилось",
+          description: "Множитель клика вернулся к обычному значению.",
+          variant: "destructive"
+        });
+      }
+    };
+
+    const timer = setInterval(checkBoost, 1000);
+    return () => clearInterval(timer);
+  }, [boostActive, boostEndTime]);
+
   const handleClick = () => {
     const newClicks = clicks + 1;
     setClicks(newClicks);
@@ -53,12 +87,73 @@ const Index = () => {
       setLevel(prevLevel => prevLevel + 1);
       setClickValue(prevValue => parseFloat((prevValue * 1.5).toFixed(2)));
       setClicksToNextLevel(prevTarget => Math.floor(prevTarget * 1.8));
+      
+      toast({
+        title: "Уровень повышен!",
+        description: `Вы достигли уровня ${level + 1}! Стоимость клика увеличена в 1.5 раза.`
+      });
     }
   };
   
   // Расчёт процента для прогресс-бара
   const progressPercentage = Math.min(100, (clicks / clicksToNextLevel) * 100);
-  
+
+  // Имитация покупки доната
+  const handleDonate = (amount: number, benefit: string, duration?: number) => {
+    toast({
+      title: "Спасибо за поддержку!",
+      description: `Ваш платеж на сумму ${amount} ₽ обрабатывается.`
+    });
+
+    // Здесь будет код для обработки платежа
+    // В реальном приложении нужно интегрировать платежную систему
+
+    // Применяем эффект от доната
+    if (benefit === "boost") {
+      const boostDuration = duration || 300000; // 5 минут по умолчанию
+      const endTime = Date.now() + boostDuration;
+      
+      setBoostActive(true);
+      setBoostEndTime(endTime);
+      setClickValue(prev => parseFloat((prev * 2).toFixed(2))); // Удваиваем стоимость клика
+      
+      toast({
+        title: "Усиление активировано!",
+        description: `Стоимость клика удвоена на ${duration ? duration / 60000 : 5} минут.`
+      });
+    } else if (benefit === "money") {
+      const bonusMoney = amount * 10; // получаем в 10 раз больше виртуальных денег
+      setMoney(prev => parseFloat((prev + bonusMoney).toFixed(2)));
+      
+      toast({
+        title: "Бонус получен!",
+        description: `На ваш счет зачислено ${bonusMoney} ₽.`
+      });
+    } else if (benefit === "levelUp") {
+      const levelsToAdd = Math.floor(amount / 100);
+      if (levelsToAdd > 0) {
+        setLevel(prev => prev + levelsToAdd);
+        setClickValue(prev => parseFloat((prev * Math.pow(1.5, levelsToAdd)).toFixed(2)));
+        
+        toast({
+          title: "Уровень повышен!",
+          description: `Вы мгновенно получили ${levelsToAdd} ${levelsToAdd === 1 ? 'уровень' : 'уровня'}.`
+        });
+      }
+    }
+  };
+
+  // Расчет времени до окончания буста
+  const getBoostTimeRemaining = () => {
+    if (!boostActive) return null;
+    
+    const remaining = Math.max(0, boostEndTime - Date.now());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-purple-50 p-4">
       <div className="max-w-md w-full space-y-8">
@@ -72,6 +167,12 @@ const Index = () => {
             <CardTitle className="text-2xl">Ваш баланс</CardTitle>
             <CardDescription>Уровень: {level}</CardDescription>
             <div className="mt-4 text-3xl font-bold text-green-600">{money.toFixed(2)} ₽</div>
+            {boostActive && (
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 mt-2">
+                <Icon name="Zap" className="mr-1 h-3 w-3" />
+                Бустер активен: {getBoostTimeRemaining()}
+              </Badge>
+            )}
           </CardHeader>
           
           <CardContent className="space-y-6">
@@ -102,9 +203,96 @@ const Index = () => {
           </CardContent>
           
           <CardFooter className="flex flex-col space-y-2">
-            <p className="text-sm text-center text-gray-500">
+            <p className="text-sm text-center text-gray-500 mb-4">
               Повышайте свой уровень, чтобы увеличить стоимость клика!
             </p>
+            
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="w-full border-green-500 text-green-600 hover:bg-green-50">
+                  <Icon name="HeartHandshake" className="mr-2 h-5 w-5" />
+                  Поддержать проект
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Поддержите разработчика</SheetTitle>
+                  <SheetDescription>
+                    Ваша поддержка помогает нам улучшать игру и добавлять новые функции!
+                  </SheetDescription>
+                </SheetHeader>
+                
+                <div className="grid gap-4 mt-6">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xl">Ускорение x2</CardTitle>
+                      <CardDescription>Удвойте стоимость клика на время</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">Ваши клики будут стоить в 2 раза больше на протяжении указанного времени.</p>
+                    </CardContent>
+                    <CardFooter className="flex flex-col space-y-2">
+                      <Button onClick={() => handleDonate(50, "boost", 300000)} className="w-full bg-green-500 hover:bg-green-600">
+                        5 минут - 50 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(100, "boost", 600000)} className="w-full bg-green-500 hover:bg-green-600">
+                        10 минут - 100 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(250, "boost", 1800000)} className="w-full bg-green-500 hover:bg-green-600">
+                        30 минут - 250 ₽
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                  
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xl">Мгновенные деньги</CardTitle>
+                      <CardDescription>Получите виртуальную валюту сразу</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">Конвертируйте реальные деньги в виртуальную валюту с выгодным курсом 1:10.</p>
+                    </CardContent>
+                    <CardFooter className="flex flex-col space-y-2">
+                      <Button onClick={() => handleDonate(100, "money")} className="w-full bg-blue-500 hover:bg-blue-600">
+                        1,000 ₽ - 100 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(250, "money")} className="w-full bg-blue-500 hover:bg-blue-600">
+                        2,500 ₽ - 250 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(500, "money")} className="w-full bg-blue-500 hover:bg-blue-600">
+                        5,000 ₽ - 500 ₽
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                  
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xl">Мгновенный уровень</CardTitle>
+                      <CardDescription>Повысьте свой уровень без кликов</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">Пропустите долгий процесс прокачки и получите мгновенные уровни.</p>
+                    </CardContent>
+                    <CardFooter className="flex flex-col space-y-2">
+                      <Button onClick={() => handleDonate(100, "levelUp")} className="w-full bg-purple-500 hover:bg-purple-600">
+                        1 уровень - 100 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(250, "levelUp")} className="w-full bg-purple-500 hover:bg-purple-600">
+                        2 уровня - 250 ₽
+                      </Button>
+                      <Button onClick={() => handleDonate(500, "levelUp")} className="w-full bg-purple-500 hover:bg-purple-600">
+                        5 уровней - 500 ₽
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                  
+                  <div className="text-xs text-center text-muted-foreground mt-4">
+                    <p>Это демонстрационная версия. В реальном приложении здесь будет настоящая оплата.</p>
+                    <p>Все транзакции безопасны и защищены.</p>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </CardFooter>
         </Card>
         
