@@ -12,6 +12,76 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AspectRatio } from "@/components/ui/aspect-ratio"; 
+
+// Имитация рекламных данных
+const adBanners = [
+  {
+    id: "ad1",
+    title: "Смартфоны до -50%",
+    description: "Огромный выбор по самым низким ценам",
+    imageUrl: "https://source.unsplash.com/random/300x200/?smartphone",
+    linkUrl: "https://example.com/smartphones",
+    reward: 0.5
+  },
+  {
+    id: "ad2",
+    title: "Кроссовки Nike",
+    description: "Новая коллекция уже в продаже",
+    imageUrl: "https://source.unsplash.com/random/300x200/?nike",
+    linkUrl: "https://example.com/shoes",
+    reward: 0.7
+  },
+  {
+    id: "ad3",
+    title: "Летний отдых 2025",
+    description: "Раннее бронирование со скидкой 30%",
+    imageUrl: "https://source.unsplash.com/random/300x200/?beach",
+    linkUrl: "https://example.com/vacation",
+    reward: 1.0
+  },
+  {
+    id: "ad4",
+    title: "Учи английский",
+    description: "Первый месяц бесплатно",
+    imageUrl: "https://source.unsplash.com/random/300x200/?english",
+    linkUrl: "https://example.com/english",
+    reward: 0.8
+  },
+  {
+    id: "ad5",
+    title: "Доставка еды",
+    description: "Промокод на первый заказ",
+    imageUrl: "https://source.unsplash.com/random/300x200/?food",
+    linkUrl: "https://example.com/food",
+    reward: 0.6
+  }
+];
+
+// Имитация видеорекламы
+const videoAds = [
+  {
+    id: "vid1",
+    title: "Новый Macbook Pro",
+    duration: 15,
+    thumbnailUrl: "https://source.unsplash.com/random/300x200/?macbook",
+    reward: 5
+  },
+  {
+    id: "vid2",
+    title: "Подписка на стриминг",
+    duration: 20,
+    thumbnailUrl: "https://source.unsplash.com/random/300x200/?streaming",
+    reward: 7
+  },
+  {
+    id: "vid3",
+    title: "Автомобили Audi 2025",
+    duration: 30,
+    thumbnailUrl: "https://source.unsplash.com/random/300x200/?audi",
+    reward: 10
+  }
+];
 
 const Index = () => {
   const [clicks, setClicks] = useState<number>(() => {
@@ -64,6 +134,29 @@ const Index = () => {
     return saved ? JSON.parse(saved) : [];
   });
   
+  // Реклама
+  const [currentAd, setCurrentAd] = useState<typeof adBanners[0] | null>(null);
+  const [adViewed, setAdViewed] = useState<{[key: string]: boolean}>(() => {
+    const saved = localStorage.getItem("adViewed");
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [videoAdWatching, setVideoAdWatching] = useState<typeof videoAds[0] | null>(null);
+  const [videoProgress, setVideoProgress] = useState<number>(0);
+  const [videoTimer, setVideoTimer] = useState<NodeJS.Timeout | null>(null);
+  const [watchedVideos, setWatchedVideos] = useState<{[key: string]: boolean}>(() => {
+    const saved = localStorage.getItem("watchedVideos");
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [adStats, setAdStats] = useState<{
+    viewed: number;
+    clicked: number;
+    earned: number;
+    videosWatched: number;
+  }>(() => {
+    const saved = localStorage.getItem("adStats");
+    return saved ? JSON.parse(saved) : { viewed: 0, clicked: 0, earned: 0, videosWatched: 0 };
+  });
+  
   // Сохранение данных при их изменении
   useEffect(() => {
     localStorage.setItem("clicks", clicks.toString());
@@ -74,7 +167,10 @@ const Index = () => {
     localStorage.setItem("boostActive", boostActive.toString());
     localStorage.setItem("boostEndTime", boostEndTime.toString());
     localStorage.setItem("withdrawalHistory", JSON.stringify(withdrawalHistory));
-  }, [clicks, money, level, clickValue, clicksToNextLevel, boostActive, boostEndTime, withdrawalHistory]);
+    localStorage.setItem("adViewed", JSON.stringify(adViewed));
+    localStorage.setItem("watchedVideos", JSON.stringify(watchedVideos));
+    localStorage.setItem("adStats", JSON.stringify(adStats));
+  }, [clicks, money, level, clickValue, clicksToNextLevel, boostActive, boostEndTime, withdrawalHistory, adViewed, watchedVideos, adStats]);
   
   // Проверка активного бустера
   useEffect(() => {
@@ -94,6 +190,87 @@ const Index = () => {
     const timer = setInterval(checkBoost, 1000);
     return () => clearInterval(timer);
   }, [boostActive, boostEndTime]);
+
+  // Показ рекламы
+  useEffect(() => {
+    // Выбираем рекламу которую пользователь еще не видел
+    if (!currentAd && clicks > 0 && clicks % 15 === 0) {
+      const unseenAds = adBanners.filter(ad => !adViewed[ad.id]);
+      if (unseenAds.length > 0) {
+        const randomAd = unseenAds[Math.floor(Math.random() * unseenAds.length)];
+        setCurrentAd(randomAd);
+        
+        // Отмечаем рекламу как просмотренную и обновляем статистику
+        setAdViewed(prev => ({...prev, [randomAd.id]: true}));
+        setAdStats(prev => ({
+          ...prev,
+          viewed: prev.viewed + 1,
+          earned: parseFloat((prev.earned + randomAd.reward * 0.1).toFixed(2))
+        }));
+        
+        // Добавляем небольшую награду за просмотр
+        setMoney(prev => parseFloat((prev + randomAd.reward * 0.1).toFixed(2)));
+        
+        // Через 30 секунд скрываем рекламу
+        setTimeout(() => {
+          setCurrentAd(null);
+        }, 30000);
+      }
+    }
+  }, [clicks, currentAd, adViewed]);
+
+  // Обработка просмотра видеорекламы
+  useEffect(() => {
+    if (videoAdWatching) {
+      if (videoTimer) clearInterval(videoTimer);
+      
+      // Имитация просмотра видеорекламы
+      const timer = setInterval(() => {
+        setVideoProgress(prev => {
+          const newProgress = prev + (100 / (videoAdWatching.duration * 2)); // в 2 раза быстрее для демо
+          
+          if (newProgress >= 100) {
+            clearInterval(timer);
+            
+            // Отмечаем видео как просмотренное
+            setWatchedVideos(prev => ({...prev, [videoAdWatching.id]: true}));
+            
+            // Добавляем награду за просмотр
+            setMoney(prev => parseFloat((prev + videoAdWatching.reward).toFixed(2)));
+            
+            // Обновляем статистику
+            setAdStats(prev => ({
+              ...prev,
+              videosWatched: prev.videosWatched + 1,
+              earned: parseFloat((prev.earned + videoAdWatching.reward).toFixed(2))
+            }));
+            
+            // Показываем уведомление
+            toast({
+              title: "Видео просмотрено!",
+              description: `Вы получили ${videoAdWatching.reward} ₽ за просмотр видеорекламы.`
+            });
+            
+            // Сбрасываем состояние
+            setTimeout(() => {
+              setVideoAdWatching(null);
+              setVideoProgress(0);
+            }, 1000);
+            
+            return 100;
+          }
+          
+          return newProgress;
+        });
+      }, 500);
+      
+      setVideoTimer(timer);
+      
+      return () => {
+        if (timer) clearInterval(timer);
+      };
+    }
+  }, [videoAdWatching]);
 
   const handleClick = () => {
     const newClicks = clicks + 1;
@@ -272,6 +449,51 @@ const Index = () => {
         description: `Сумма ${amountNum} ₽ переведена на вашу карту ${selectedBank === 'sber' ? 'Сбербанк' : 'Тинькофф'}.`
       });
     }, 10000); // Имитация задержки в 10 секунд
+  };
+
+  // Обработка клика по рекламе
+  const handleAdClick = (ad: typeof adBanners[0]) => {
+    // Открываем ссылку на рекламу в новой вкладке
+    window.open(ad.linkUrl, "_blank");
+    
+    // Добавляем награду за клик
+    setMoney(prev => parseFloat((prev + ad.reward).toFixed(2)));
+    
+    // Обновляем статистику
+    setAdStats(prev => ({
+      ...prev,
+      clicked: prev.clicked + 1,
+      earned: parseFloat((prev.earned + ad.reward).toFixed(2))
+    }));
+    
+    // Показываем уведомление
+    toast({
+      title: "Спасибо за интерес!",
+      description: `Вы получили ${ad.reward} ₽ за переход по рекламе.`
+    });
+    
+    // Скрываем рекламу
+    setCurrentAd(null);
+  };
+
+  // Запуск видеорекламы
+  const handleWatchVideoAd = (videoAd: typeof videoAds[0]) => {
+    if (watchedVideos[videoAd.id]) {
+      toast({
+        title: "Видео уже просмотрено",
+        description: "Вы уже получили награду за это видео. Попробуйте другие!",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setVideoAdWatching(videoAd);
+    setVideoProgress(0);
+    
+    toast({
+      title: "Загрузка видео...",
+      description: "Пожалуйста, подождите. Видео начнется автоматически."
+    });
   };
 
   return (
@@ -496,6 +718,161 @@ const Index = () => {
           </CardFooter>
         </Card>
         
+        {/* Секция рекламы */}
+        <Card className="shadow-lg border-2 border-purple-100">
+          <CardHeader>
+            <CardTitle className="text-xl">Заработок на рекламе</CardTitle>
+            <CardDescription>Смотрите рекламу и получайте дополнительные деньги</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="video" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="video">Видеореклама</TabsTrigger>
+                <TabsTrigger value="stats">Статистика</TabsTrigger>
+              </TabsList>
+              <TabsContent value="video" className="space-y-4 mt-4">
+                {videoAdWatching ? (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-center">{videoAdWatching.title}</h3>
+                    <div className="relative">
+                      <AspectRatio ratio={16 / 9} className="bg-gray-100 rounded-md overflow-hidden">
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <img
+                            src={videoAdWatching.thumbnailUrl}
+                            alt={videoAdWatching.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <Icon name="Play" className="h-16 w-16 text-white animate-pulse" />
+                          </div>
+                        </div>
+                      </AspectRatio>
+                      <Progress value={videoProgress} className="mt-2" />
+                      <p className="text-center text-sm mt-1">
+                        {videoAdWatching.reward} ₽ после просмотра
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-center">
+                      Выберите видеорекламу для просмотра и получите вознаграждение!
+                    </p>
+                    {videoAds.map((video) => (
+                      <div
+                        key={video.id}
+                        className={`flex items-center border rounded-md p-3 transition-colors ${
+                          watchedVideos[video.id]
+                            ? "bg-gray-100 cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:bg-blue-50 hover:border-blue-200"
+                        }`}
+                        onClick={() => !watchedVideos[video.id] && handleWatchVideoAd(video)}
+                      >
+                        <div className="w-20 h-12 bg-gray-200 rounded mr-3 overflow-hidden flex-shrink-0">
+                          <img
+                            src={video.thumbnailUrl}
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium">{video.title}</div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>{video.duration} сек</span>
+                            <span className="text-green-600 font-semibold">+{video.reward} ₽</span>
+                          </div>
+                        </div>
+                        {watchedVideos[video.id] && (
+                          <Badge variant="outline" className="ml-2 bg-gray-100 text-gray-600">
+                            Просмотрено
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="stats" className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <Card className="border border-gray-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold">{adStats.viewed}</div>
+                      <div className="text-sm text-gray-500">Реклам просмотрено</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-gray-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold">{adStats.clicked}</div>
+                      <div className="text-sm text-gray-500">Переходов по рекламе</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-gray-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold">{adStats.videosWatched}</div>
+                      <div className="text-sm text-gray-500">Видео просмотрено</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-gray-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">{adStats.earned.toFixed(2)} ₽</div>
+                      <div className="text-sm text-gray-500">Заработано на рекламе</div>
+                    </CardContent>
+                  </Card>
+                </div>
+                <div className="text-sm text-center text-gray-500">
+                  <p>Смотрите больше рекламы, чтобы увеличить свой доход!</p>
+                  <p>Новые рекламные предложения появляются каждые 15 кликов.</p>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+        
+        {/* Текущая реклама (всплывающий баннер) */}
+        {currentAd && (
+          <Card className="shadow-lg border-2 border-blue-200 animate-in fade-in slide-in-from-bottom-10 duration-500">
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg">{currentAd.title}</CardTitle>
+                <Badge variant="outline" className="font-normal bg-green-50 text-green-700">
+                  +{currentAd.reward} ₽
+                </Badge>
+              </div>
+              <CardDescription>{currentAd.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="pb-2">
+              <div 
+                className="w-full h-32 rounded-md overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => handleAdClick(currentAd)}
+              >
+                <img 
+                  src={currentAd.imageUrl} 
+                  alt={currentAd.title} 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setCurrentAd(null)}
+                className="text-gray-500"
+              >
+                Закрыть
+              </Button>
+              <Button 
+                size="sm" 
+                className="bg-blue-500 hover:bg-blue-600"
+                onClick={() => handleAdClick(currentAd)}
+              >
+                <Icon name="ExternalLink" className="mr-1 h-4 w-4" />
+                Перейти
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+        
         {/* История выводов */}
         {withdrawalHistory.length > 0 && (
           <Card className="shadow-lg border-2 border-purple-100">
@@ -531,6 +908,12 @@ const Index = () => {
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>Чем больше кликаете, тем больше зарабатываете!</p>
           <p>Каждый новый уровень увеличивает стоимость клика в полтора раза.</p>
+          <p className="mt-2">
+            <Badge variant="outline" className="font-normal bg-blue-50 text-blue-700 mr-1">
+              Реклама
+            </Badge>
+            Смотрите рекламу для дополнительного заработка
+          </p>
         </div>
       </div>
     </div>
